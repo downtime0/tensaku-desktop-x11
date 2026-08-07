@@ -1,0 +1,198 @@
+#!/usr/bin/env bash
+
+# Tensaku also has app-level defaults in:
+# ~/.var/app/dev.tensaku.Tensaku/config/tensaku/config.toml
+# Edit with:
+# nano ~/.var/app/dev.tensaku.Tensaku/config/tensaku/config.toml
+#
+# This script focuses on clipboard/file handoff and window sizing behavior.
+# Some startup or sizing defaults may still be influenced by config.toml.
+
+set -u
+
+cache_dir="$HOME/.cache/tensaku"
+mkdir -p "$cache_dir"
+
+required_cmds=(
+    awk
+    cp
+    find
+    flatpak
+    grep
+    head
+    mktemp
+    python3
+    sed
+    tr
+    wmctrl
+    xclip
+)
+
+# Fail fast with a clear error when required tools are unavailable.
+# This avoids deeper runtime failures later in clipboard/window handling.
+for cmd in "${required_cmds[@]}"; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        echo "EXIT: Required command not found: $cmd" >&2
+        exit 1
+    fi
+done
+
+before="$(wmctrl -lx | awk 'tolower($0) ~ /tensaku/ {print $1}')"
+
+image_file=""
+temporary_file=false
+
+cleanup() {
+    if [[ "$temporary_file" == true && -n "$image_file" ]]; then
+        # Delay deletion to avoid racing Tensaku's file read.
+        (
+            sleep 15
+            rm -f -- "$image_file"
+        ) >/dev/null 2>&1 &
+    fi
+}
+trap cleanup EXIT
+
+targets="$(xclip -selection clipboard -t TARGETS -o 2>/dev/null || true)"
+
+# Case 1: Clipboard contains actual PNG image data.
+if grep -qi '^image/png$' <<<"$targets"; then
+    image_file="$(mktemp --suffix=.png "$cache_dir/clipboard-XXXXXX")"
+    temporary_file=true
+
+    if ! xclip -selection clipboard -t image/png -o >"$image_file" 2>/dev/null ||
+        [[ ! -s "$image_file" ]]; then
+        echo "EXIT: Could not read PNG image from clipboard." >&2
+        exit 1
+    fi
+
+# Case 2: Nemo copied a file.
+elif grep -qi '^x-special/gnome-copied-files$' <<<"$targets"; then
+    clipboard_data="$(
+        xclip -selection clipboard \
+            -t x-special/gnome-copied-files -o 2>/dev/null
+    )"
+
+    uri="$(
+        sed -n '2p' <<<"$clipboard_data" |
+            tr -d '\r' |
+            sed 's/[[:space:]]*$//'
+    )"
+
+    if [[ -z "$uri" ]]; then
+        echo "EXIT: Clipboard URI is empty." >&2
+        exit 1
+    fi
+
+    image_file="$(
+        python3 -c '
+import sys
+from urllib.parse import unquote, urlparse
+print(unquote(urlparse(sys.argv[1]).path))
+' "$uri"
+    )"
+
+# Case 3: Clipboard contains a generic file URI.
+elif grep -qi '^text/uri-list$' <<<"$targets"; then
+    uri="$(
+        xclip -selection clipboard -t text/uri-list -o 2>/dev/null |
+            grep -v '^#' |
+            head -n1 |
+            tr -d '\r' |
+            sed 's/[[:space:]]*$//'
+    )"
+
+    if [[ -z "$uri" ]]; then
+        echo "EXIT: Clipboard URI is empty." >&2
+        exit 1
+    fi
+
+    image_file="$(
+        python3 -c '
+import sys
+from urllib.parse import unquote, urlparse
+print(unquote(urlparse(sys.argv[1]).path))
+' "$uri"
+    )"
+
+else
+    echo "EXIT: Clipboard does not contain an image or copied image file." >&2
+    exit 1
+fi
+
+case "${image_file,,}" in
+    *.png|*.jpg|*.jpeg|*.webp|*.bmp)
+        ;;
+    *)
+        echo "EXIT: Copied file is not a supported image: $image_file" >&2
+        exit 1
+        ;;
+esac
+
+if [[ ! -f "$image_file" ]]; then
+    echo "EXIT: Copied image file was not found: $image_file" >&2
+    exit 1
+fi
+
+# Stage copied files locally because Flatpak cannot directly access
+# GVFS paths such as SMB mounts under /run/user/.../gvfs.
+if [[ "$temporary_file" == false ]]; then
+    extension="${image_file##*.}"
+    staged_file="$(mktemp "$cache_dir/copied-XXXXXX.${extension}")"
+
+    if ! cp -- "$image_file" "$staged_file"; then
+        echo "EXIT: Could not copy image into the Tensaku cache." >&2
+        rm -f "$staged_file"
+        exit 1
+    fi
+
+    image_file="$staged_file"
+fi
+
+# Remove staged images older than one day.
+find "$cache_dir" -type f \
+    \( -name 'copied-*' -o -name 'clipboard-*' \) \
+    -mtime +1 -delete 2>/dev/null
+
+# Finally
+flatpak run dev.tensaku.Tensaku --filename "$image_file" &
+
+for _ in {1..100}; do
+    while read -r window_id; do
+        [[ -z "$window_id" ]] && continue
+
+        if ! grep -qxF "$window_id" <<<"$before"; then
+            if [[ "$temporary_file" == false ]]; then
+                # File-based images trigger a delayed Tensaku resize.
+                # Wait until its geometry settles before applying our final size.
+                last_geometry=""
+                stable_count=0
+
+                for _ in {1..40}; do
+                    geometry="$(
+                        wmctrl -lG |
+                            awk -v id="$window_id" '$1 == id {print $3, $4, $5, $6}'
+                    )"
+
+                    if [[ -n "$geometry" && "$geometry" == "$last_geometry" ]]; then
+                        ((stable_count++))
+                    else
+                        stable_count=0
+                        last_geometry="$geometry"
+                    fi
+
+                    [[ $stable_count -ge 3 ]] && break
+                    sleep 0.05
+                done
+            fi
+
+            wmctrl -i -r "$window_id" -e 0,-1,-1,1024,768
+            exit 0
+        fi
+    done < <(wmctrl -lx | awk 'tolower($0) ~ /tensaku/ {print $1}')
+
+    sleep 0.05
+done
+
+echo "EXIT: Tensaku window was not detected." >&2
+exit 1

@@ -1,0 +1,11 @@
+[general]
+initial-tool = "pointer"
+copy-command = "xclip -selection clipboard -t image/png -i"
+actions-on-enter = ["save-to-clipboard"]
+auto-copy = true
+corner-roundness = 6
+primary-highlighter = "block"
+
+[font]
+family = "Ubuntu"
+#style = "Bold"

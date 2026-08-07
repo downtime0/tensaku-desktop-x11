@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Open Clipboard in Tensaku
+Comment=Open clipboard image in Tensaku
+Exec=tensaku-clipboard
+TryExec=tensaku-clipboard
+Icon=dev.tensaku.Tensaku
+Terminal=false
+Categories=Graphics;
