@@ -24,7 +24,7 @@ These notes document the Linux Mint X11 clipboard workflow used to make Tensaku 
 
 The supporting files (`tensaku-clipboard.desktop`, `tensaku-clipboard`, and `config.toml`) are in the `src/` folder of this repository.
 
-This repository also includes `src/install-fonts`, a helper that checks whether one or more font families are already available through `fontconfig` and installs missing families into `~/.local/share/fonts/tensaku`. It prefers built-in GitHub-backed font sources first, and only falls back to Google Fonts for other families.
+This repository also includes `src/install-fonts.sh`, a helper that checks whether one or more font families are already available through `fontconfig` and installs missing families into `~/.local/share/fonts/tensaku`. It prefers built-in GitHub-backed font sources first, and only falls back to Google Fonts for other families.
 
 ### Expected behavior
 
@@ -368,7 +368,7 @@ fc-list : family |
 
 ## 8.1 Installing Fonts
 
-The repo includes `src/install-fonts`, which installs missing font families for the current user without `sudo`. The script requires `woff2_decompress` (`sudo apt install woff2`) only when the selected source provides `.woff2` files, such as the built-in Excalidraw aliases; fonts provided as `.ttf` files do not need it.
+The repo includes `src/install-fonts.sh`, which installs missing font families for the current user without `sudo`. The script requires `woff2_decompress` (`sudo apt install woff2`) only when the selected source provides `.woff2` files, such as the built-in Excalidraw aliases; fonts provided as `.ttf` files do not need it.
 
 Source priority is:
 
@@ -378,20 +378,20 @@ Source priority is:
 If you run it with no arguments, it reads the font family from `src/config.toml`:
 
 ```bash
-./src/install-fonts
+./src/install-fonts.sh
 ```
 
 You can also pass one or more families directly:
 
 ```bash
-./src/install-fonts Ubuntu "Atkinson Hyperlegible"
+./src/install-fonts.sh Ubuntu "Atkinson Hyperlegible"
 ```
 
 Excalidraw-related names are supported directly:
 
 ```bash
-./src/install-fonts Excalifont
-./src/install-fonts Virgil
+./src/install-fonts.sh Excalifont
+./src/install-fonts.sh Virgil
 ```
 
 `Excalifont` is the better default if you want the current Excalidraw-style handwritten look. `Virgil` is still installable, but Excalidraw now treats it as an older font.
@@ -401,13 +401,13 @@ Excalidraw-related names are supported directly:
 Or use a comma-separated list:
 
 ```bash
-./src/install-fonts "Ubuntu, Excalifont"
+./src/install-fonts.sh "Ubuntu, Excalifont"
 ```
 
 Use a dry run if you only want to see what it would install:
 
 ```bash
-./src/install-fonts --dry-run
+./src/install-fonts.sh --dry-run
 ```
 
 Installed fonts are written under `~/.local/share/fonts/tensaku`, then refreshed with `fc-cache -f`.

@@ -21,7 +21,7 @@ required_cmds=(
 
 usage() {
     cat <<'EOF'
-Usage: install-fonts [--dry-run] [FONT ...]
+Usage: install-fonts.sh [--dry-run] [FONT ...]
 
 Checks whether each font family is already installed through fontconfig.
 Missing families are downloaded from known GitHub sources first, then from Google Fonts only as a last-resort fallback, and installed under:
