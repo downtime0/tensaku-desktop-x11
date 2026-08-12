@@ -24,6 +24,8 @@ These notes document the Linux Mint X11 clipboard workflow used to make Tensaku 
 
 The supporting files (`tensaku-clipboard.desktop`, `tensaku-clipboard`, and `config.toml`) are in the `src/` folder of this repository.
 
+This repository also includes `src/install-fonts`, a helper that checks whether one or more font families are already available through `fontconfig` and installs missing families into `~/.local/share/fonts/tensaku`. It prefers built-in GitHub-backed font sources first, and only falls back to Google Fonts for other families.
+
 ### Expected behavior
 
 See Section 6 below for workflows, but the script should:
@@ -67,6 +69,12 @@ sudo apt install xclip wmctrl
 ```
 
 Tensaku is being used through its X11 fallback under the current Cinnamon session. Its normal Wayland-oriented tools such as `grim`, `slurp`, and `wl-copy` are not required for this workflow.
+
+For the optional font installer helper, make sure `curl`, `fc-list`, `fc-cache`, and `python3` are available. `woff2_decompress` is also required when the selected font source provides `.woff2` files. `curl`, `python3`, and the fontconfig tools are usually already present on Linux Mint; install the WOFF2 converter with:
+
+```bash
+sudo apt install woff2
+```
 
 ---
 
@@ -358,6 +366,52 @@ fc-list : family |
   grep -Ei 'Noto Sans|DejaVu Sans|Liberation Sans|Ubuntu|Cantarell|Inter'
 ```
 
+## 8.1 Installing Fonts
+
+The repo includes `src/install-fonts`, which installs missing font families for the current user without `sudo`. The script requires `woff2_decompress` (`sudo apt install woff2`) only when the selected source provides `.woff2` files, such as the built-in Excalidraw aliases; fonts provided as `.ttf` files do not need it.
+
+Source priority is:
+
+1. Built-in GitHub-backed aliases such as `Excalifont` and `Virgil`
+2. Google Fonts as a last-resort fallback for other families
+
+If you run it with no arguments, it reads the font family from `src/config.toml`:
+
+```bash
+./src/install-fonts
+```
+
+You can also pass one or more families directly:
+
+```bash
+./src/install-fonts Ubuntu "Atkinson Hyperlegible"
+```
+
+Excalidraw-related names are supported directly:
+
+```bash
+./src/install-fonts Excalifont
+./src/install-fonts Virgil
+```
+
+`Excalifont` is the better default if you want the current Excalidraw-style handwritten look. `Virgil` is still installable, but Excalidraw now treats it as an older font.
+
+`Excalifont` is explicitly OFL-licensed in the Excalidraw repository. `Virgil` is bundled upstream and supported by the script, but this README does not make a stronger license claim for it.
+
+Or use a comma-separated list:
+
+```bash
+./src/install-fonts "Ubuntu, Excalifont"
+```
+
+Use a dry run if you only want to see what it would install:
+
+```bash
+./src/install-fonts --dry-run
+```
+
+Installed fonts are written under `~/.local/share/fonts/tensaku`, then refreshed with `fc-cache -f`.
+
 ---
 
 ## 9. Useful Tensaku Commands
@@ -499,3 +553,7 @@ Direct image file launch
 ```
 
 This leaves Linux Mint responsible for capture and Tensaku responsible for annotation, while also making Tensaku a general-purpose annotation target for images from many sources.
+
+&nbsp;
+
+---
